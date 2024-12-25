@@ -5,6 +5,7 @@ from flask import Flask, jsonify
 import numpy as np
 import firebase_admin
 from firebase_admin import credentials, db
+import pytz
 import tensorflow as tf
 import numpy as np
 from scipy.signal import find_peaks, butter, filtfilt
@@ -43,7 +44,7 @@ def trigger():
         return jsonify({'error': str(e)}), 500
 
 
-model = tf.keras.models.load_model('my_model.h5')  # Update with your model path
+model = tf.keras.models.load_model('my_model_1.h5',compile=False)  # Update with your model path
 
 
 def calculate_intervals(ecg_data):
@@ -172,9 +173,9 @@ def calculate_intervals(ecg_data):
     result_array = result_array.reshape(-1, 1)
     scaler = StandardScaler()
     result_array = scaler.fit_transform(result_array)
-    
+    print(np.array(result_array),'shape:',np.array(result_array).shape)
     return np.array(result_array)
-
+    
 def preprocess_data(ecg_value):
     print("preprocess_data")
     # Assuming ecg_value is a list of raw values
@@ -208,14 +209,7 @@ def process_new_data(user_id, data_id, ecg_data):
         
         # Reference to the user's prediction node
         result_ref = db.reference(f'/users/{user_id}/predictions/{data_id}')
-        existing_prediction = result_ref.get()
 
-        # Check if a prediction already exists for today
-        if existing_prediction and existing_prediction.get('date') == today_date:
-            print(f"Prediction already exists for {user_id} on {today_date}")
-            return existing_prediction['prediction_value']
-        
-        # Proceed with prediction if not done today
         ecg_value = ecg_data.get('ecg_value')
         
         ecg_value = np.array(ecg_value)
@@ -237,23 +231,40 @@ def process_new_data(user_id, data_id, ecg_data):
             "Magnesium": "Normal",
             "Calcium": "Normal"
         }
+        print(prediction)
 
         # Identify the predicted electrolyte and its lab value
         electrolytes = ["Potassium", "Magnesium", "Calcium"]
-        predicted_index = np.argmax(prediction[0])  # Index of the predicted electrolyte
-        predicted_lab_value = prediction[1][0][0]  # Lab value associated with the prediction
         
-        # Get the name of the predicted electrolyte
-        predicted_electrolyte = electrolytes[predicted_index]
 
-        # Check if the predicted lab value is high, low, or normal for the predicted electrolyte
-        if predicted_lab_value < electrolyte_ranges[predicted_electrolyte]["low"]:
-            prediction_result[predicted_electrolyte] = "Low"
-        elif predicted_lab_value > electrolyte_ranges[predicted_electrolyte]["high"]:
-            prediction_result[predicted_electrolyte] = "High"
-        else:
-            prediction_result[predicted_electrolyte] = "Normal"
+# Get probabilities and corresponding lab values
+        probabilities = prediction[0][0]  # Extract probabilities
+        lab_values = prediction[1][0]     # Extract lab values
+        # print(prediction)
+        # Filter electrolytes with probability > 0.7
+        filtered_results = [
+            {"electrolyte": electrolytes[i], "lab_value": lab_values[i]}
+            for i in range(len(electrolytes)) if probabilities[i] > 0.6
+        ]
+        print(filtered_results)
+#       
+#         
 
+# Dictionary to store prediction results, default all to "Normal"
+        prediction_result = {electrolyte: "Normal" for electrolyte in electrolytes}
+
+            # Check lab values only for filtered results (probability > 0.7)
+        for result in filtered_results:
+            electrolyte = result["electrolyte"]
+            lab_value = result["lab_value"]
+            
+            # Compare lab value with the defined ranges
+            if lab_value < electrolyte_ranges[electrolyte]["low"]:
+                prediction_result[electrolyte] = "Low"
+            elif lab_value > electrolyte_ranges[electrolyte]["high"]:
+                prediction_result[electrolyte] = "High"
+            else:
+                prediction_result[electrolyte] = "Normal"
         # Save the prediction result along with the date and time back to Firebase
         result_ref.set({
             'prediction_value': prediction_result,
@@ -280,15 +291,15 @@ def monitor_firebase():
 
         # Check if there's an existing prediction for today
         existing_prediction = None
-        if predictions_data:
-            for data_id, data in predictions_data.items():
-                if data.get('date') == today_date:
-                    existing_prediction = data
-                    break
+        # if predictions_data:
+        #     for data_id, data in predictions_data.items():
+        #         if data.get('data_id') == data_id:
+        #             existing_prediction = data
+        #             break
 
-        if existing_prediction:
-            # If a prediction for today exists, return it
-            return jsonify({'message': f'Prediction already exists for user {user_id}', 'prediction': existing_prediction}), 200
+        # if existing_prediction:
+        #     # If a prediction for today exists, return it
+        #     return jsonify({'message': f'Prediction already exists for user {user_id}', 'prediction': existing_prediction}), 200
         
         # If no prediction exists for today, process the latest data
         ref = db.reference(f'/users/{user_id}/ecg_data/entries')
@@ -306,6 +317,7 @@ def monitor_firebase():
                 # Process the latest entry
                 pred = process_new_data(user_id, last_entry_id, last_entry)
                 # Add today's date to the prediction
+                # pakistan_tz = pytz.timezone('Asia/Karachi')
                 result_ref.update({
                     'date': today_date,
                     'time': datetime.now().strftime("%H:%M:%S")
