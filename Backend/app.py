@@ -12,7 +12,7 @@ from scipy.signal import find_peaks, butter, filtfilt
 from sklearn.preprocessing import StandardScaler
 from datetime import datetime
 
-
+#
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -48,22 +48,14 @@ model = tf.keras.models.load_model('my_model_1.h5',compile=False)  # Update with
 
 
 def calculate_intervals(ecg_data):
-    print(len(ecg_data))
-    if len(ecg_data) < 27:
-    # Skip filtering and proceed with raw data or default values
-        # print(ecg_data)
-        return ecg_data
-    
 
     def butter_bandpass_filter(data, lowcut, highcut, fs, order=5):
         nyq = 0.5 * fs
         low = lowcut / nyq
         high = highcut / nyq
         b, a = butter(order, [low, high], btype='band')
-        return filtfilt(b, a, data)
-        
-    # Skip filtering and proceed with raw data or default values
-
+        y = filtfilt(b, a, data)
+        return y
 
     # Parameters
     fs = 250  # Sampling frequency
@@ -71,9 +63,8 @@ def calculate_intervals(ecg_data):
     highcut = 45.0  # High cut-off frequency
 
     # Filter ECG data
-    # print(len(ecg_data))
     filtered_ecg = butter_bandpass_filter(ecg_data, lowcut, highcut, fs, order=4)
-    # print(len(filtered_ecg))
+
     filtered_ecg_normalized = (filtered_ecg - np.min(filtered_ecg)) / (np.max(filtered_ecg) - np.min(filtered_ecg)) * 2 - 1
     # Detect R peaks
     r_peaks, _ = find_peaks(filtered_ecg_normalized, distance=fs*0.6, height=np.mean(filtered_ecg_normalized) + 0.5 * np.std(filtered_ecg_normalized))
@@ -201,23 +192,15 @@ def preprocess_data(ecg_value):
     # print("intervals: ", intervals)
     # Step 3: Reshape to the format (1, 8, 1) as expected by the model
     processed_value = intervals.reshape(1, desired_length, 1)
-    # print('processed_value',processed_value.shape)
     return processed_value
 
 def preprocess_data(ecg_value):
-    try:
-        ecg_values = np.array(ecg_value).flatten()
-        
-        intervals = calculate_intervals(ecg_values)
-        
-        desired_length = 8
-        intervals = intervals[:desired_length]
-        print(intervals)
-        processed_value = intervals.reshape(1, desired_length, 1)
-        return processed_value
-    except Exception as e:
-        print('error occured',e)
-
+    ecg_values = np.array(ecg_value).flatten()
+    intervals = calculate_intervals(ecg_values)
+    desired_length = 8
+    intervals = intervals[:desired_length]
+    processed_value = intervals.reshape(1, desired_length, 1)
+    return processed_value
 
 def process_new_data(user_id, data_id, ecg_data):
     try:
@@ -228,8 +211,8 @@ def process_new_data(user_id, data_id, ecg_data):
         result_ref = db.reference(f'/users/{user_id}/predictions/{data_id}')
 
         ecg_value = ecg_data.get('ecg_value')
-        # print(ecg_value)
-        # ecg_value = np.array(ecg_value)
+        
+        ecg_value = np.array(ecg_value)
         processed_value = preprocess_data(ecg_value)
         # print(processed_value)
         # print(processed_value.shape)
@@ -241,14 +224,13 @@ def process_new_data(user_id, data_id, ecg_data):
             "Magnesium": {"low": 1.5, "high": 2.5},
             "Calcium": {"low": 8.5, "high": 10.5}
         }
-        # prediction_result = {
-        # electrolyte:{
-        #     "Potassium": {"value": 3.5, "classification": "Normal"},
-        #     "Magnesium": {"value": 1.5, "classification": "Normal"},
-        #     "Calcium": {"value": 8.5, "classification": "Normal"}
-        # }}
-        # Initialize the prediction dictionary with "Normal" values
 
+        # Initialize the prediction dictionary with "Normal" values
+        prediction_result = {
+            "Potassium": "Normal",
+            "Magnesium": "Normal",
+            "Calcium": "Normal"
+        }
         print(prediction)
 
         # Identify the predicted electrolyte and its lab value
@@ -269,13 +251,8 @@ def process_new_data(user_id, data_id, ecg_data):
 #         
 
 # Dictionary to store prediction results, default all to "Normal"
-        prediction_result = {
-            electrolyte: {"labvalue": None, "classification": "Normal"}
-            for electrolyte in electrolytes
-        }
-        prediction_result["Potassium"]["labvalue"] = round(float(np.float32(3.51)),3)
-        prediction_result["Magnesium"]["labvalue"] = round(float(np.float32(1.72)),3)
-        prediction_result["Calcium"]["labvalue"] = round(float(np.float32(8.63)),3)
+        prediction_result = {electrolyte: "Normal" for electrolyte in electrolytes}
+
             # Check lab values only for filtered results (probability > 0.7)
         for result in filtered_results:
             electrolyte = result["electrolyte"]
@@ -283,15 +260,11 @@ def process_new_data(user_id, data_id, ecg_data):
             
             # Compare lab value with the defined ranges
             if lab_value < electrolyte_ranges[electrolyte]["low"]:
-                prediction_result[electrolyte]['classification'] = "Low"
-                prediction_result[electrolyte]['labvalue'] = round(float(np.float32(lab_value)),3)
+                prediction_result[electrolyte] = "Low"
             elif lab_value > electrolyte_ranges[electrolyte]["high"]:
-                prediction_result[electrolyte]['classification'] = "High"
-                prediction_result[electrolyte]['labvalue'] = round(float(np.float32(lab_value)),3)
+                prediction_result[electrolyte] = "High"
             else:
                 prediction_result[electrolyte] = "Normal"
-                prediction_result[electrolyte]['labvalue'] = round(float(np.float32(lab_value)),3)
-            
         # Save the prediction result along with the date and time back to Firebase
         result_ref.set({
             'prediction_value': prediction_result,
@@ -349,7 +322,6 @@ def monitor_firebase():
                     'date': today_date,
                     'time': datetime.now().strftime("%H:%M:%S")
                 })
-            print(pred)
 
         return jsonify({'message': f'Prediction made for user {user_id}', 'prediction': {
         'prediction_value': pred
@@ -363,30 +335,33 @@ def monitor_firebase():
 def get_prediction_history():
     try:
         user_id = request.args.get("user_id")
+    
+        today_date = datetime.now().strftime("%Y-%m-%d")
 
         # Reference for user's predictions
         result_ref = db.reference(f'/users/{user_id}/predictions')
         predictions_data = result_ref.get()
-
+    
         if not predictions_data:
             return jsonify({"message": "No prediction history found for the user"}), 200
 
-        # Prepare the response with all prediction history
+        # Format prediction data
         history = []
+        #change accirding to pred value
         for data_id, data in predictions_data.items():
             history.append({
                 "date": data.get("date", ""),
                 "time": data.get("time", ""),
-                "K+": data.get("prediction_value", {}).get("Potassium", {}).get("labvalue"),
-                "Ca+": data.get("prediction_value", {}).get("Calcium", {}).get("labvalue"),
-                "Mg+": data.get("prediction_value", {}).get("Magnesium", {}).get("labvalue"),
+                "K+": data["prediction_value"].get("Potassium", "Normal"),
+                "Ca+": data["prediction_value"].get("Calcium", "Normal"),
+                "Mg+": data["prediction_value"].get("Magnesium", "Normal")
             })
 
-        return jsonify({"message": f"Historical data for user: {user_id}", "prediction": history}), 200
+        return jsonify({'message': f'Historical data for user: {user_id}', 'prediction': history}), 200
     except Exception as e:
-        print(f"Error fetching history for user {user_id}: {e}")
-        return jsonify({"message": f"Error: {e}"}), 500
-
+        print(f'Error monitoring Firebase for user {user_id}: {e}')
+        return jsonify({'message': f'Error: {e}'}), 500
+    
 
 
 if __name__ == '__main__':
