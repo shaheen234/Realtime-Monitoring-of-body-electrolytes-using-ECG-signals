@@ -63,7 +63,40 @@ The **HeartSync Mobile App** is available on GitHub: [HeartSync Mobile App Repos
 
 ## Setup Instructions
 
-### 1. Hardware Setup
+### 1. Firebase Setup
+1. Create a Firebase Project:
+      1. Go to Firebase Console and create a new project.
+      2. Enable Realtime Database and Storage.
+2. Download the Admin SDK JSON:
+      1. In Project Settings > Service Accounts, generate a new private key and download the JSON file.
+      2. Add Firebase to the Backend:
+      3. Update app.py
+         ```bash
+         import firebase_admin
+         from firebase_admin import credentials
+         
+         cred = credentials.Certificate("firebase-adminsdk.json")
+         firebase_admin.initialize_app(cred, {
+             "databaseURL": "https://<your-database-name>.firebaseio.com"
+         })
+      4. Setup Firebase Database Rules:
+
+         1. Update Realtime Database rules to secure user data:
+         ```bash
+        
+         {
+           "rules": {
+             "users": {
+               ".read": "auth != null",
+               ".write": "auth != null"
+             }
+           }
+         }
+
+
+      2. Place the JSON file (e.g., firebase-adminsdk.json) in the project root.
+
+### 2. Hardware Setup
 1. Connect the **AD8232 sensor** to the **ESP32 microcontroller** as specified in the project report.
 2. Ensure proper electrode placement for accurate ECG signal acquisition.
 
