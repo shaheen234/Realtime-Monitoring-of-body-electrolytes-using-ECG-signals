@@ -126,7 +126,39 @@ Clone the HeartSync mobile app from the HeartSync Mobile App Repository
 2. Install the required dependencies
      ```bash
      npm install
-3. Add Process-data API Details to the Mobile App
+3.Set Up Firebase Authentication:
+   1. Install Firebase SDK for React Native:
+      ```bash
+      npm install firebase
+   2.Update the Firebase configuration in firebaseConfig.js in scripts folder
+      
+      import { initializeApp } from "firebase/app";
+      import { initializeAuth, getReactNativePersistence } from "firebase/auth";
+      import AsyncStorage from "@react-native-async-storage/async-storage";
+      import { getDatabase } from 'firebase/database';
+      
+      const firebaseConfig = {
+           apiKey: "<your-api-key>",
+           authDomain: "<your-auth-domain>",
+           databaseURL: "<your-database-url>",
+           projectId: "<your-project-id>",
+           storageBucket: "<your-storage-bucket>",
+           messagingSenderId: "<your-messaging-sender-id>",
+           appId: "<your-app-id>"
+         };
+
+      const app = initializeApp(firebaseConfig);
+      const database = getDatabase(app);
+      
+      // Initialize Firebase Auth with persistence
+      const auth = initializeAuth(app, {
+        persistence: getReactNativePersistence(AsyncStorage),
+      });
+      
+      export { app, auth,database };
+            
+
+4. Add Process-data API Details to the Mobile App
     1. Open the instructions.tsx file in heart-sync-app/app/(tabs).
     2. Update the following details:Backend API URL: Replace the placeholder with the API URL for your backend (e.g., http://<your-backend-ip>:<port>/process-data).
     3. ESP32 IP Address: Add the IP address of your ESP32 device.
@@ -140,7 +172,7 @@ Clone the HeartSync mobile app from the HeartSync Mobile App Repository
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ user_id: user.uid }),});
-4. Add History API Details to the Mobile App
+5. Add History API Details to the Mobile App
     1. Open the history.tsx file in heart-sync-app/app/(tabs).
     2. Update the following details:Backend API URL: Replace the placeholder with the API URL for your backend (e.g., http://<your-backend-ip>:<port>/...).
        ```bash
@@ -154,11 +186,11 @@ Clone the HeartSync mobile app from the HeartSync Mobile App Repository
           }
         );
     
-5. Now after these changes are made on the cmd run the command install the EXPO GO app from App Store
-6. After the Installation is done on cmd run the following command
+6. Now after these changes are made on the cmd run the command install the EXPO GO app from App Store
+7. After the Installation is done on cmd run the following command
      ```bash
        npx expo start
-7. Scan the QR code Generated on the Terminal and Now you will be able to Run mobile app smoothly and you can check your body electrolytes.
+8. Scan the QR code Generated on the Terminal and Now you will be able to Run mobile app smoothly and you can check your body electrolytes.
      
 
          
